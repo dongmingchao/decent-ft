@@ -1,147 +1,76 @@
 package main
 
 import (
-	resource_pool "decent-ft/src/resource-pool"
-	"encoding/binary"
+	"decent-ft/src/JSlike"
+	"decent-ft/src/scraper"
+	"encoding/json"
 	"fmt"
-	"github.com/fsnotify/fsnotify"
-	"io/ioutil"
 	"log"
-	"os"
 )
 
-func watchDir(dirname string, handler func(event fsnotify.Event)) {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer watcher.Close()
-
-	done := make(chan bool)
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-				log.Println("event:", event)
-				handler(event)
-				if event.Op&fsnotify.Write == fsnotify.Write {
-					log.Println("modified file:", event.Name)
-				}
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				log.Println("error:", err)
-			}
-		}
-	}()
-
-	err = watcher.Add(dirname) // "./src/resource-pool/sample-pool"
-	if err != nil {
-		log.Fatal(err)
-	}
-	<-done
+type mapAoi struct {
+	Status string        `json:"status"`
+	rest   JSlike.Object `json:"-"`
 }
 
-func watchHandler(event fsnotify.Event) {
-	f, err := os.OpenFile(event.Name, os.O_RDONLY, 0644)
-	if err != nil {
-		log.Println(err)
-	} else {
-		text, _ := ioutil.ReadAll(f)
-		println(string(text))
-		f.Close()
+func (aoi *mapAoi) pickData(buf []byte) error {
+	var err error
+	switch aoi.Status {
+	case "1":
+		err = json.Unmarshal(buf, &aoi.rest)
+	case "8":
+		//httpErr.ErrCode = http.StatusNotFound
+		//httpErr.ErrMsg = "404 Not found!"
+		//err = &httpErr
+	case "3":
+		//httpErr.ErrCode = http.StatusBadRequest
+		//httpErr.ErrMsg = "参数错误!"
+		//err = &httpErr
 	}
+	return err
 }
-
-func readFile(fileName string, cb func(*os.File)) {
-	f, err := os.OpenFile(fileName, os.O_RDONLY, 0600)
-	if err != nil {
-		log.Println(err)
-	} else {
-		cb(f)
-		f.Close()
-	}
-}
-
-func stashFile(file *os.File) resource_pool.GHash {
-	text, _ := ioutil.ReadAll(file)
-	obj := resource_pool.NewGHash(text)
-	os.MkdirAll(stashDir+"/"+obj.MarkStr[0:2], os.ModeDir|0700)
-	f, err := os.OpenFile(stashDir+"/"+obj.MarkStr[0:2]+"/"+obj.MarkStr[2:38], os.O_CREATE|os.O_RDWR, 0644)
-	binary.Write(f, binary.BigEndian, obj.FullBody.Bytes())
-	if err != nil {
-		log.Println(err)
-	}
-	return obj
-}
-
-const (
-	focusDir       = "./src/resource-pool/sample-pool"
-	stashDir       = "./objects"
-	stashIndexFile = stashDir + "/index"
-)
 
 func main() {
-	if _, err := os.Stat(stashDir); os.IsNotExist(err) {
-		os.Mkdir(stashDir, os.ModeDir|0700)
+	var ids []string
+	scr := scraper.Scraper{}
+	scr.Result.Json = &ids
+	err := scr.Get(idSourceUrl, nil)
+	if err != nil {
+		log.Fatal(err)
 	}
-	stash := resource_pool.GTree{}
-	if _, err := os.Stat(stashIndexFile); os.IsNotExist(err) {
-		os.Create(stashIndexFile)
-		stash.Version = 1
+	fmt.Println(ids)
+	if len(ids) == 0 {
+		return
 	}
-	stashIndex, _ := os.Open(stashIndexFile)
-	stash.Read(stashIndex)
-	stashIndex.Close()
-	fmt.Println(stash)
-	//fileHashSet := [][20]byte{}
-	//for ei, ef := range stash.Files {
-	//	fileHashSet[ei] = ef.Checksum
+	//for _, id := range ids {
+	//httpErr := Error{
+	//	ErrUrl: reqUrl,
 	//}
-
-	//dir, err := ioutil.ReadDir(focusDir)
-	//if err != nil {
-	//	log.Fatal(err)
+	scr = scraper.Scraper{}
+	scr.AfterInit = func() {
+		println(scr.Url.String(), "after init")
+		scr.EventBus.On(scraper.Event_BeforeRequest, func(any ...JSlike.Any) {
+			println("before request")
+			println(scraper.Event_BeforeRequest)
+		})
+	}
+	var data mapAoi
+	scr.Result.Json = &data
+	err = scr.Get(mapDataUrl, map[string]string{
+		"id": ids[0],
+	})
+	data.pickData(scr.Result.Buf.Bytes())
+	if err != nil {
+		log.Printf("[ID %s]请求出错", ids[0])
+		log.Println(err)
+	} else {
+		//for key, _ := range data.rest["data"].(map[string]interface{}) {
+		//	fmt.Println(key)
+		//}
+		//res, err := json.MarshalIndent(data.rest["data"], "", "\t")
+		//if err == nil {
+		//	fmt.Println(string(res))
+		//}
+	}
 	//}
-	//for _, each := range dir {
-	//	fileName := focusDir + "/" + each.Name()
-	//	gfile := resource_pool.GFile{
-	//		FileName: fileName,
-	//		FileNameLen: uint16(len(fileName)),
-	//	}
-	//	readFile(fileName, func(file *os.File) {
-	//		obj := stashFile(file)
-	//		gfile.Checksum = obj.Mark
-	//	})
-	//	stash.Files = append(stash.Files, gfile)
-	//}
-	//stash.FileCount = uint32(len(stash.Files))
-	//
-	//var allBytes bytes.Buffer
-	//allBytes.Write(UInt32ToBytes(stash.Version))
-	//allBytes.Write(UInt32ToBytes(stash.FileCount))
-	//binary.Write(&allBytes, binary.BigEndian, stash.Files)
-	//println(allBytes.String())
-	//stash.Checksum = resource_pool.Sha1CheckSum(allBytes.Bytes())
-	//fmt.Println(stash)
-	//
-	//stashIndex, _ = os.OpenFile(stashIndexFile, os.O_CREATE | os.O_RDWR, 0644)
-	//stash.Write(stashIndex)
-	//stashIndex.Close()
-
-	//dir, _ = ioutil.ReadDir(stashDir)
-	//for _, each := range dir {
-	//	println(each.Name())
-	//}
-	//watchDir(focusDir, watchHandler)
-}
-
-func UInt32ToBytes(i uint32) []byte {
-	buf := make([]byte, 4)
-	binary.BigEndian.PutUint32(buf, i)
-	return buf
 }
