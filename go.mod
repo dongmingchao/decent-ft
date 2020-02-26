@@ -1,3 +1,3 @@
-module github.com/dongmingchao/decent-ft/scraper
+module scraper
 
 go 1.13
