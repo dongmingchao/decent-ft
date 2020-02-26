@@ -1,9 +1,9 @@
 package caretaker
 
 import (
-	resource_pool "decent-ft/src/resource-pool"
 	"encoding/binary"
 	"fmt"
+	resource_pool "github.com/dongmingchao/decent-ft/src/resource-pool"
 	"github.com/fsnotify/fsnotify"
 	"io/ioutil"
 	"log"

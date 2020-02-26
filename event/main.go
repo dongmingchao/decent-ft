@@ -1,7 +1,7 @@
 package event
 
 import (
-	"decent-ft/src/JSlike"
+	"github.com/dongmingchao/decent-ft/JSlike"
 	"sort"
 )
 
