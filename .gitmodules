@@ -1,0 +1,4 @@
+[submodule "scraper"]
+	path = src/scraper
+	url = https://github.com/dongmingchao/decent-ft.git
+	branch = scraper

@@ -5,14 +5,22 @@ import (
 	"decent-ft/src/JSlike"
 	"decent-ft/src/event"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
 )
 
-func (scr *Scraper) Request() error {
+func (scr *Scraper) Request(data io.Reader) error {
 	scr.EventBus.Emit(Event_BeforeRequest)
-	resp, err := http.Get(scr.Url.String())
+	var resp *http.Response
+	var err error
+	if scr.Method == "POST" {
+		resp, err = http.Post(scr.Url.String(),
+			"application/json", data)
+	} else {
+		resp, err = http.Get(scr.Url.String())
+	}
 	scr.Result.Resp = resp
 	if err == nil {
 		scr.Result.Buf.ReadFrom(resp.Body)
@@ -38,10 +46,21 @@ func CombineURL(base string, appendQuery map[string]string) url.URL {
 func (scr *Scraper) Get(baseUrl string, query map[string]string) error {
 	scr.EventBus = event.Bus{}
 	scr.Url = CombineURL(baseUrl, query)
+	scr.Method = "GET"
 	if scr.AfterInit != nil {
 		scr.AfterInit()
 	}
-	return scr.Request()
+	return scr.Request(nil)
+}
+
+func (scr *Scraper) Post(baseUrl string, query map[string]string, data io.Reader) error {
+	scr.EventBus = event.Bus{}
+	scr.Url = CombineURL(baseUrl, query)
+	scr.Method = "POST"
+	if scr.AfterInit != nil {
+		scr.AfterInit()
+	}
+	return scr.Request(data)
 }
 
 type Result struct {
@@ -52,6 +71,7 @@ type Result struct {
 
 type Scraper struct {
 	Url       url.URL
+	Method    string
 	Result    Result
 	AfterInit func()
 	EventBus  event.Bus
