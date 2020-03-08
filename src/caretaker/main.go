@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"sync"
 	"syscall"
 )
 
@@ -195,7 +196,7 @@ func newCareWatcher(stash resourcePool.GTree) *careWatcher {
 
 
 
-func WatchDir() {
+func WatchDir(wg sync.WaitGroup) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	var fileWatcher *fsnotify.Watcher
@@ -212,6 +213,7 @@ func WatchDir() {
 	}
 	fmt.Println("[File Watcher] Stop")
 	SaveIndex(gStash)
+	defer wg.Done()
 }
 
 func UInt32ToBytes(i uint32) []byte {

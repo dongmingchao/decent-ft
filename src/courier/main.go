@@ -1,15 +1,17 @@
 package courier
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/dongmingchao/decent-ft/src/caretaker"
-	"io"
+	resourcePool "github.com/dongmingchao/decent-ft/src/resource-pool"
 	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 )
 
@@ -25,6 +27,7 @@ func freePort() *net.UDPAddr {
 	laddr, _ := net.ResolveUDPAddr("udp", conn.LocalAddr().String())
 	return laddr
 }
+
 type Op byte
 
 const (
@@ -55,33 +58,25 @@ func Send(raddr *net.UDPAddr) {
 }
 
 func recv(conn *net.UDPConn, askCode Op) {
-	bakLen := 0
-	var bakCode byte
-	bak := make([]byte, 1024)
-	n, err := conn.Read(bak)
-	bakLen += n
-	fmt.Println(string(bak[:bakLen]))
+	reader := bufio.NewReader(conn)
+	length,err := reader.ReadByte()
 	if err != nil {
 		log.Fatal(err)
 	}
-	if bakLen == 1 {
-		bakCode = bak[0]
+	bakCode, err := reader.ReadByte()
+	if err != nil {
+		log.Fatal(err)
 	}
+	println("content len: ", length)
+	println("back code: ", bakCode)
 	switch askCode {
 	case AskIndex:
 		if bakCode == byte(Done) {
-			fmt.Println("read index")
-			for {
-				bak = make([]byte, 1024)
-				n, err := conn.Read(bak)
-				bakLen += n
-				if err != nil {
-					if err != io.EOF {
-						log.Printf("Read error: %s", err)
-					}
-					break
-				}
-			}
+			buf := make([]byte, length - 1)
+			reader.Read(buf)
+			stash := resourcePool.GTree{}
+			stash.Read(bytes.NewReader(buf))
+			fmt.Println(stash)
 		}
 	}
 
@@ -90,7 +85,7 @@ func recv(conn *net.UDPConn, askCode Op) {
 	//fmt.Println("recv: ", string(b[:bakLen]))
 }
 
-func Start() {
+func Start(wg sync.WaitGroup) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	var conn *net.UDPConn
@@ -119,7 +114,10 @@ func Start() {
 						log.Fatal(err)
 					}
 					buf.Write(index)
-					n, err = conn.WriteToUDP(buf.Bytes(), raddr)
+					var fin bytes.Buffer
+					fin.WriteByte(byte(len(buf.Bytes())))
+					fin.ReadFrom(&buf)
+					n, err = conn.WriteToUDP(fin.Bytes(), raddr)
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -137,5 +135,5 @@ func Start() {
 		log.Fatal(err)
 	}
 	fmt.Println("[Courier] Stop")
+	defer wg.Done()
 }
-
