@@ -1,6 +1,7 @@
 package caretaker
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	resource_pool "github.com/dongmingchao/decent-ft/src/resource-pool"
@@ -8,16 +9,17 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/signal"
+	"sort"
+	"syscall"
 )
 
-func watchDir(dirname string, handler func(event fsnotify.Event)) {
+func watchDir(dirname string, handler func(event fsnotify.Event)) *fsnotify.Watcher {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer watcher.Close()
 
-	done := make(chan bool)
 	go func() {
 		for {
 			select {
@@ -43,18 +45,60 @@ func watchDir(dirname string, handler func(event fsnotify.Event)) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	<-done
+	return watcher
 }
 
-func watchHandler(event fsnotify.Event) {
-	f, err := os.OpenFile(event.Name, os.O_RDONLY, 0644)
-	if err != nil {
-		log.Println(err)
-	} else {
-		text, _ := ioutil.ReadAll(f)
-		println(string(text))
-		f.Close()
+func (watcher *careWatcher) watchHandler(event fsnotify.Event) {
+	length := len(watcher.fileNames)
+	id := sort.SearchStrings(watcher.fileNames, event.Name)
+	println("search file", id)
+	//if event.Op&fsnotify.Create == fsnotify.Create {
+	//	if id == length {
+	//	}
+	//}
+	if event.Op&fsnotify.Write == fsnotify.Write {
+		if id == length {
+			watcher.stashAppend(event.Name)
+		} else {
+			gfile := gStash.Files[id]
+			oldMarkStr := fmt.Sprintf("%x", gfile.Checksum)
+			readFile(event.Name, func(file *os.File) {
+				obj := stashFile(file)
+				gfile.Checksum = obj.Mark
+			})
+			hashDir := stashDir+"/"+oldMarkStr[0:2]
+			stashPath := hashDir+"/"+oldMarkStr[2:38]
+			os.Remove(stashPath)
+			println("remove", stashPath)
+			_ = os.Remove(hashDir)
+		}
 	}
+	if event.Op&fsnotify.Rename == fsnotify.Rename {
+
+	}
+		//f, err := os.Open(event.Name)
+	//if err != nil {
+	//	log.Println(err)
+	//} else {
+	//	text, _ := ioutil.ReadAll(f)
+	//	println(string(text))
+	//	f.Close()
+	//}
+}
+
+func (watcher *careWatcher) stashAppend(filename string) {
+	var gfile resource_pool.GFile
+	readFile(filename, func(file *os.File) {
+		fName := file.Name()
+		obj := stashFile(file)
+		gfile = resource_pool.GFile{
+			FileName: fName,
+			FileNameLen: uint16(len(fName)),
+			Checksum: obj.Mark,
+		}
+	})
+	gStash.Files = append(gStash.Files, &gfile)
+	watcher.fileNames = append(watcher.fileNames, filename)
 }
 
 func readFile(fileName string, cb func(*os.File)) {
@@ -79,26 +123,38 @@ func stashFile(file *os.File) resource_pool.GHash {
 	return obj
 }
 
+func removeStash() {
+
+}
+
 const (
 	focusDir       = "./src/resource-pool/sample-pool"
 	stashDir       = "./objects"
 	stashIndexFile = stashDir + "/index"
 )
 
-func main() {
+func ReadIndex() resource_pool.GTree {
+	stash := resource_pool.GTree{}
 	if _, err := os.Stat(stashDir); os.IsNotExist(err) {
 		os.Mkdir(stashDir, os.ModeDir|0700)
+		fmt.Println("Create Stash Dir: ", stashDir)
 	}
-	stash := resource_pool.GTree{}
 	if _, err := os.Stat(stashIndexFile); os.IsNotExist(err) {
 		os.Create(stashIndexFile)
+		fmt.Println("Create Stash Index file: ", stashIndexFile)
 		stash.Version = 1
+	} else {
+		stashIndex, _ := os.Open(stashIndexFile)
+		stash.Read(stashIndex)
+		stashIndex.Close()
+		fmt.Println("Found Stash Index file")
+		fmt.Println(stash)
 	}
-	stashIndex, _ := os.Open(stashIndexFile)
-	stash.Read(stashIndex)
-	stashIndex.Close()
-	fmt.Println(stash)
-	//fileHashSet := [][20]byte{}
+	return stash
+}
+
+func SaveIndex(stash resource_pool.GTree) {
+	//var fileHashSet [][20]byte
 	//for ei, ef := range stash.Files {
 	//	fileHashSet[ei] = ef.Checksum
 	//}
@@ -109,35 +165,53 @@ func main() {
 	//}
 	//for _, each := range dir {
 	//	fileName := focusDir + "/" + each.Name()
-	//	gfile := resource_pool.GFile{
-	//		FileName: fileName,
-	//		FileNameLen: uint16(len(fileName)),
-	//	}
-	//	readFile(fileName, func(file *os.File) {
-	//		obj := stashFile(file)
-	//		gfile.Checksum = obj.Mark
-	//	})
-	//	stash.Files = append(stash.Files, gfile)
 	//}
-	//stash.FileCount = uint32(len(stash.Files))
-	//
-	//var allBytes bytes.Buffer
-	//allBytes.Write(UInt32ToBytes(stash.Version))
-	//allBytes.Write(UInt32ToBytes(stash.FileCount))
-	//binary.Write(&allBytes, binary.BigEndian, stash.Files)
-	//println(allBytes.String())
-	//stash.Checksum = resource_pool.Sha1CheckSum(allBytes.Bytes())
-	//fmt.Println(stash)
-	//
-	//stashIndex, _ = os.OpenFile(stashIndexFile, os.O_CREATE | os.O_RDWR, 0644)
-	//stash.Write(stashIndex)
-	//stashIndex.Close()
+	stash.FileCount = uint32(len(stash.Files))
 
-	//dir, _ = ioutil.ReadDir(stashDir)
-	//for _, each := range dir {
-	//	println(each.Name())
-	//}
-	//watchDir(focusDir, watchHandler)
+	var allBytes bytes.Buffer
+	allBytes.Write(UInt32ToBytes(stash.Version))
+	allBytes.Write(UInt32ToBytes(stash.FileCount))
+	binary.Write(&allBytes, binary.BigEndian, stash.Files)
+	println(allBytes.String())
+	stash.Checksum = resource_pool.Sha1CheckSum(allBytes.Bytes())
+	fmt.Println(stash)
+
+	stashIndex, _ := os.OpenFile(stashIndexFile, os.O_CREATE | os.O_RDWR, 0644)
+	stash.Write(stashIndex)
+	stashIndex.Close()
+}
+var gStash resource_pool.GTree
+type careWatcher struct {
+	fileNames []string
+}
+
+func newCareWatcher(stash resource_pool.GTree) *careWatcher {
+	var watcher careWatcher
+	for _, file := range stash.Files {
+		watcher.fileNames = append(watcher.fileNames, file.FileName)
+	}
+	return &watcher
+}
+
+
+
+func WatchDir() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	var fileWatcher *fsnotify.Watcher
+	go func() {
+		gStash = ReadIndex()
+		watcher := newCareWatcher(gStash)
+		fileWatcher = watchDir(focusDir, watcher.watchHandler)
+	}()
+	fmt.Println("[File Watcher] Start")
+	<-sigs
+	err := fileWatcher.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("[File Watcher] Stop")
+	SaveIndex(gStash)
 }
 
 func UInt32ToBytes(i uint32) []byte {

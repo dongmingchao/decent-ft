@@ -6,13 +6,14 @@ import (
 	"compress/zlib"
 	"crypto/sha1"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"github.com/dongmingchao/decent-ft/JSlike"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
-	"strings"
 )
 
 /**
@@ -111,11 +112,19 @@ type GFile struct {
 }
 
 func (file GFile) String() string {
-	return strings.Join([]string{
-		fmt.Sprintf("FileNameLen:\t%d", file.FileNameLen),
-		fmt.Sprintf("FileName:\t%s", file.FileName),
-		fmt.Sprintf("Checksum:\t%x", file.Checksum),
-	}, "\n")
+	s, err := json.MarshalIndent(file, "", "  ")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return string(s)
+}
+
+func (file GFile) MarshalJSON() ([]byte, error){
+	return json.Marshal(JSlike.Object{
+		"FileNameLen": file.FileNameLen,
+		"FileName": file.FileName,
+		"Checksum": fmt.Sprintf("%x", file.Checksum),
+	})
 }
 
 func (file GFile) Write(w io.Writer) {
@@ -135,17 +144,25 @@ func (file *GFile) Read(r io.Reader) {
 type GTree struct {
 	Version   uint32
 	FileCount uint32
-	Files     []GFile
+	Files     []*GFile
 	Checksum  [20]byte
 }
 
+func (t GTree) MarshalJSON() ([]byte, error){
+	return json.Marshal(JSlike.Object{
+		"Version": t.Version,
+		"FileCount": t.FileCount,
+		"Files": t.Files,
+		"Checksum": fmt.Sprintf("%x", t.Checksum),
+	})
+}
+
 func (t GTree) String() string {
-	return strings.Join([]string{
-		fmt.Sprintf("Version:	%d", t.Version),
-		fmt.Sprintf("FileCount:	%d", t.FileCount),
-		fmt.Sprintf("Files:		%s", t.Files),
-		fmt.Sprintf("Checksum:	%x", t.Checksum),
-	}, "\n")
+	s, err := json.MarshalIndent(t, "", "  ")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return string(s)
 }
 
 func (t GTree) Write(w io.Writer) {
@@ -161,7 +178,7 @@ func (t GTree) Write(w io.Writer) {
 func (t *GTree) Read(r io.Reader) {
 	binary.Read(r, binary.BigEndian, &t.Version)
 	binary.Read(r, binary.BigEndian, &t.FileCount)
-	t.Files = make([]GFile, t.FileCount)
+	t.Files = make([]*GFile, t.FileCount)
 	for i := uint32(0); i < t.FileCount; i++ {
 		t.Files[i].Read(r)
 	}
