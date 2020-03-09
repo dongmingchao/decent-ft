@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/dongmingchao/decent-ft/src/caretaker"
 	resourcePool "github.com/dongmingchao/decent-ft/src/resource-pool"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -85,39 +84,40 @@ func recv(conn *net.UDPConn, askCode Op) {
 	//fmt.Println("recv: ", string(b[:bakLen]))
 }
 
-func Start(wg sync.WaitGroup) {
+func Start(wg *sync.WaitGroup) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	var conn *net.UDPConn
+	var conn net.PacketConn
 	var err error
 	go func() {
-		laddr := freePort()
-		println("local addr: ", laddr.String())
-		conn, err = net.ListenUDP("udp", laddr)
+		conn, err = net.ListenPacket("udp", ":0")
+		//laddr := freePort()
 		if err != nil {
 			fmt.Println("ListenUDP err:", err)
 			return
 		}
+		println("local addr: ", conn.LocalAddr().String())
 		for {
 			ask := make([]byte, 1)
-			n, raddr, err := conn.ReadFromUDP(ask)
+			n, raddr, err := conn.ReadFrom(ask)
 			if err != nil {
-				log.Fatal(err)
+				// connect closed
+				log.Printf("%v", err)
+				break
 			}
 			if n == 1 {
 				switch Op(ask[0]) {
 				case AskIndex:
 					var buf bytes.Buffer
 					buf.WriteByte(byte(Done))
-					index, err := ioutil.ReadFile(caretaker.StashIndexFile)
 					if err != nil {
 						log.Fatal(err)
 					}
-					buf.Write(index)
+					caretaker.GlobalStash.Write(&buf)
 					var fin bytes.Buffer
 					fin.WriteByte(byte(len(buf.Bytes())))
 					fin.ReadFrom(&buf)
-					n, err = conn.WriteToUDP(fin.Bytes(), raddr)
+					n, err = conn.WriteTo(fin.Bytes(), raddr)
 					if err != nil {
 						log.Fatal(err)
 					}

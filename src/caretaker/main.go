@@ -61,14 +61,14 @@ func (watcher *careWatcher) watchHandler(event fsnotify.Event) {
 		if id == length {
 			watcher.stashAppend(event.Name)
 		} else {
-			gfile := gStash.Files[id]
+			gfile := GlobalStash.Files[id]
 			oldMarkStr := fmt.Sprintf("%x", gfile.Checksum)
 			readFile(event.Name, func(file *os.File) {
 				obj := stashFile(file)
 				gfile.Checksum = obj.Mark
 			})
-			hashDir := StashDir +"/"+oldMarkStr[0:2]
-			stashPath := hashDir+"/"+oldMarkStr[2:38]
+			hashDir := StashDir + "/" + oldMarkStr[0:2]
+			stashPath := hashDir + "/" + oldMarkStr[2:38]
 			os.Remove(stashPath)
 			println("remove", stashPath)
 			_ = os.Remove(hashDir)
@@ -77,7 +77,7 @@ func (watcher *careWatcher) watchHandler(event fsnotify.Event) {
 	if event.Op&fsnotify.Rename == fsnotify.Rename {
 
 	}
-		//f, err := os.Open(event.Name)
+	//f, err := os.Open(event.Name)
 	//if err != nil {
 	//	log.Println(err)
 	//} else {
@@ -93,12 +93,12 @@ func (watcher *careWatcher) stashAppend(filename string) {
 		fName := file.Name()
 		obj := stashFile(file)
 		gfile = resourcePool.GFile{
-			FileName: fName,
+			FileName:    fName,
 			FileNameLen: uint16(len(fName)),
-			Checksum: obj.Mark,
+			Checksum:    obj.Mark,
 		}
 	})
-	gStash.Files = append(gStash.Files, &gfile)
+	GlobalStash.Files = append(GlobalStash.Files, &gfile)
 	watcher.fileNames = append(watcher.fileNames, filename)
 }
 
@@ -177,11 +177,13 @@ func SaveIndex(stash resourcePool.GTree) {
 	stash.Checksum = resourcePool.Sha1CheckSum(allBytes.Bytes())
 	fmt.Println(stash)
 
-	stashIndex, _ := os.OpenFile(StashIndexFile, os.O_CREATE | os.O_RDWR, 0644)
+	stashIndex, _ := os.OpenFile(StashIndexFile, os.O_CREATE|os.O_RDWR, 0644)
 	stash.Write(stashIndex)
 	stashIndex.Close()
 }
-var gStash resourcePool.GTree
+
+var GlobalStash resourcePool.GTree
+
 type careWatcher struct {
 	fileNames []string
 }
@@ -194,15 +196,13 @@ func newCareWatcher(stash resourcePool.GTree) *careWatcher {
 	return &watcher
 }
 
-
-
-func WatchDir(wg sync.WaitGroup) {
+func WatchDir(wg *sync.WaitGroup) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	var fileWatcher *fsnotify.Watcher
 	go func() {
-		gStash = ReadIndex()
-		watcher := newCareWatcher(gStash)
+		GlobalStash = ReadIndex()
+		watcher := newCareWatcher(GlobalStash)
 		fileWatcher = watchDir(FocusDir, watcher.watchHandler)
 	}()
 	fmt.Println("[File Watcher] Start")
@@ -212,7 +212,7 @@ func WatchDir(wg sync.WaitGroup) {
 		log.Fatal(err)
 	}
 	fmt.Println("[File Watcher] Stop")
-	SaveIndex(gStash)
+	SaveIndex(GlobalStash)
 	defer wg.Done()
 }
 

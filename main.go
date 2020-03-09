@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"github.com/dongmingchao/decent-ft/src/caretaker"
 	"github.com/dongmingchao/decent-ft/src/courier"
 	"log"
 	"net"
@@ -17,9 +16,9 @@ func init() {
 
 func main() {
 	flag.Parse()
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go caretaker.WatchDir(wg)
+	wg := sync.WaitGroup{}
+	//wg.Add(1)
+	//go caretaker.WatchDir(&wg)
 	if remoteAddr != "" {
 		println("send to: ", remoteAddr)
 		raddr, err := net.ResolveUDPAddr("udp", remoteAddr)
@@ -29,7 +28,7 @@ func main() {
 		courier.Send(raddr)
 	} else {
 		wg.Add(1)
-		go courier.Start(wg)
+		go courier.Start(&wg)
 	}
 	wg.Wait()
 }
