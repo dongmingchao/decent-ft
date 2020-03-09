@@ -50,7 +50,7 @@ func Send(raddr *net.UDPAddr) {
 	}
 	recv(conn, AskIndex)
 	err = conn.Close()
-	fmt.Println("链接关闭")
+	fmt.Println("获取Index信息完毕")
 	if err != nil {
 		log.Fatal(err)
 	}

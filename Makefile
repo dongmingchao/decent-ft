@@ -2,4 +2,6 @@
 
 start:
 	@clear
-	go run .
+	go build
+	cp decent-ft test/
+	./decent-ft

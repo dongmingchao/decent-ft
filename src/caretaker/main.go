@@ -66,6 +66,7 @@ func (watcher *careWatcher) watchHandler(event fsnotify.Event) {
 			readFile(event.Name, func(file *os.File) {
 				obj := stashFile(file)
 				gfile.Checksum = obj.Mark
+				gfile.FileSize = obj.GLen
 			})
 			hashDir := StashDir + "/" + oldMarkStr[0:2]
 			stashPath := hashDir + "/" + oldMarkStr[2:38]
@@ -95,6 +96,8 @@ func (watcher *careWatcher) stashAppend(filename string) {
 		gfile = resourcePool.GFile{
 			FileName:    fName,
 			FileNameLen: uint16(len(fName)),
+			FileType:    obj.GType,
+			FileSize:    obj.GLen,
 			Checksum:    obj.Mark,
 		}
 	})
@@ -103,7 +106,7 @@ func (watcher *careWatcher) stashAppend(filename string) {
 }
 
 func readFile(fileName string, cb func(*os.File)) {
-	f, err := os.OpenFile(fileName, os.O_RDONLY, 0600)
+	f, err := os.Open(fileName)
 	if err != nil {
 		log.Println(err)
 	} else {

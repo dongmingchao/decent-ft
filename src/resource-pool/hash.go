@@ -1,19 +1,14 @@
-package resource_pool
+package resourcePool
 
-//Go 在多个 crypto/* 包中实现了一系列散列函数。
 import (
 	"bytes"
 	"compress/zlib"
 	"crypto/sha1"
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
-	"github.com/dongmingchao/decent-ft/JSlike"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
-	"strconv"
 )
 
 /**
@@ -23,15 +18,26 @@ echo 'test content' | git hash-object -w --stdin
 git cat-file -p d670460b4b4aece5915caf5c68d12f560a9fe3e4
 test content
 */
+type FileType byte
 
 const (
-	Blob   = "blob"
-	Commit = "commit"
+	Blob   FileType = 1 << iota
+	Neighbor
 )
 
+func (t FileType) String() string {
+	switch t {
+	case Blob:
+		return "blob"
+	case Neighbor:
+		return "neighbor"
+	}
+	return "unknown"
+}
+
 type GHash struct {
-	GType    string // blob | commit
-	GLen     int
+	GType    FileType
+	GLen     uint32
 	GBin     []byte
 	Mark     [20]byte
 	MarkStr  string
@@ -74,20 +80,20 @@ func NewGHash(content []byte) GHash {
 	bin.WriteByte('\n')
 	hash := GHash{
 		GType: Blob,
-		GLen:  bin.Len(),
+		GLen:  uint32(bin.Len()),
 		GBin:  bin.Bytes(),
 	}
-	hash.FullBody = makeFullBody(hash.GType, hash.GLen, hash.GBin)
+	fLength := IntTo3Bytes(bin.Len())
+	hash.FullBody = makeFullBody(hash.GType, fLength[:], hash.GBin)
 	hash.Mark = Sha1CheckSum(hash.FullBody.Bytes())
 	hash.MarkStr = fmt.Sprintf("%x", hash.Mark)
 	return hash
 }
 
-func makeFullBody(gType string, gLen int, gBin []byte) bytes.Buffer {
+func makeFullBody(gType FileType, gLen []byte, gBin []byte) bytes.Buffer {
 	var buffer bytes.Buffer
-	buffer.WriteString(gType)
-	buffer.WriteString(" ")
-	buffer.WriteString(strconv.Itoa(gLen))
+	buffer.WriteByte(byte(gType))
+	buffer.Write(gLen)
 	buffer.WriteByte('\000')
 	buffer.Write(gBin)
 	return buffer
@@ -100,89 +106,6 @@ func Sha1CheckSum(u []byte) [20]byte {
 	var ret [20]byte
 	copy(ret[:], res[:20])
 	return ret
-}
-
-type GFile struct {
-	ctime       uint64 // 提交时间的16进制秒数
-	mtime       uint64
-	fileSize    uint32
-	FileNameLen uint16
-	FileName    string // 变长，为fileNameLen
-	Checksum    [20]byte
-}
-
-func (file GFile) String() string {
-	s, err := json.MarshalIndent(file, "", "  ")
-	if err != nil {
-		log.Fatal(err)
-	}
-	return string(s)
-}
-
-func (file GFile) MarshalJSON() ([]byte, error){
-	return json.Marshal(JSlike.Object{
-		"FileNameLen": file.FileNameLen,
-		"FileName": file.FileName,
-		"Checksum": fmt.Sprintf("%x", file.Checksum),
-	})
-}
-
-func (file GFile) Write(w io.Writer) {
-	binary.Write(w, binary.BigEndian, &file.FileNameLen)
-	binary.Write(w, binary.BigEndian, []byte(file.FileName))
-	binary.Write(w, binary.BigEndian, &file.Checksum)
-}
-
-func (file *GFile) Read(r io.Reader) {
-	binary.Read(r, binary.BigEndian, &file.FileNameLen)
-	var filename = make([]byte, file.FileNameLen)
-	binary.Read(r, binary.BigEndian, &filename)
-	file.FileName = string(filename)
-	binary.Read(r, binary.BigEndian, &file.Checksum)
-}
-
-type GTree struct {
-	Version   uint32
-	FileCount uint32
-	Files     []*GFile
-	Checksum  [20]byte
-}
-
-func (t GTree) MarshalJSON() ([]byte, error){
-	return json.Marshal(JSlike.Object{
-		"Version": t.Version,
-		"FileCount": t.FileCount,
-		"Files": t.Files,
-		"Checksum": fmt.Sprintf("%x", t.Checksum),
-	})
-}
-
-func (t GTree) String() string {
-	s, err := json.MarshalIndent(t, "", "  ")
-	if err != nil {
-		log.Fatal(err)
-	}
-	return string(s)
-}
-
-func (t GTree) Write(w io.Writer) {
-	binary.Write(w, binary.BigEndian, &t.Version)
-	binary.Write(w, binary.BigEndian, &t.FileCount)
-	for _, each := range t.Files {
-		//fmt.Println(each)
-		each.Write(w)
-	}
-	binary.Write(w, binary.BigEndian, &t.Checksum)
-}
-
-func (t *GTree) Read(r io.Reader) {
-	binary.Read(r, binary.BigEndian, &t.Version)
-	binary.Read(r, binary.BigEndian, &t.FileCount)
-	t.Files = make([]*GFile, t.FileCount)
-	for i := uint32(0); i < t.FileCount; i++ {
-		t.Files[i].Read(r)
-	}
-	binary.Read(r, binary.BigEndian, &t.Checksum)
 }
 
 /**
