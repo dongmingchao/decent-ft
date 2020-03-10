@@ -11,16 +11,18 @@ import (
 	"net/url"
 )
 
-func (scr *Scraper) Request(data io.Reader) error {
+func (scr *Scraper) Request(data io.Reader, header map[string]string) error {
 	scr.EventBus.Emit(Event_BeforeRequest)
 	var resp *http.Response
 	var err error
+	req, _ := http.NewRequest(scr.Method, scr.Url.String(), data)
 	if scr.Method == "POST" {
-		resp, err = http.Post(scr.Url.String(),
-			"application/json", data)
-	} else {
-		resp, err = http.Get(scr.Url.String())
+		req.Header.Set("Content-Type", "application/json")
 	}
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+	resp, err = http.DefaultClient.Do(req)
 	scr.Result.Resp = resp
 	if err == nil {
 		scr.Result.Buf.ReadFrom(resp.Body)
@@ -43,24 +45,40 @@ func CombineURL(base string, appendQuery map[string]string) url.URL {
 	return *reqUrl
 }
 
-func (scr *Scraper) Get(baseUrl string, query map[string]string) error {
+type Method byte
+
+const (
+	GET Method = 1 << iota
+	POST
+)
+
+func (m Method) String() string {
+	switch m {
+	case GET:
+		return "GET"
+	case POST:
+		return "POST"
+	}
+	return ""
+}
+
+func (scr *Scraper) Ready(method Method, baseUrl string, query map[string]string) {
 	scr.EventBus = event.Bus{}
 	scr.Url = CombineURL(baseUrl, query)
-	scr.Method = "GET"
+	scr.Method = method.String()
 	if scr.AfterInit != nil {
 		scr.AfterInit()
 	}
-	return scr.Request(nil)
+}
+
+func (scr *Scraper) Get(baseUrl string, query map[string]string) error {
+	scr.Ready(GET, baseUrl, query)
+	return scr.Request(nil, nil)
 }
 
 func (scr *Scraper) Post(baseUrl string, query map[string]string, data io.Reader) error {
-	scr.EventBus = event.Bus{}
-	scr.Url = CombineURL(baseUrl, query)
-	scr.Method = "POST"
-	if scr.AfterInit != nil {
-		scr.AfterInit()
-	}
-	return scr.Request(data)
+	scr.Ready(POST, baseUrl, query)
+	return scr.Request(data, nil)
 }
 
 type Result struct {
