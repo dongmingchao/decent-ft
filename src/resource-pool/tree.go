@@ -12,7 +12,7 @@ import (
 type GTree struct {
 	Version   uint32
 	FileCount uint32
-	Files     []*GFile
+	Files     []GBaseInterface
 	Checksum  [20]byte
 }
 
@@ -37,7 +37,6 @@ func (t GTree) Write(w io.Writer) {
 	binary.Write(w, binary.BigEndian, &t.Version)
 	binary.Write(w, binary.BigEndian, &t.FileCount)
 	for _, each := range t.Files {
-		//fmt.Println(each)
 		each.Write(w)
 	}
 	binary.Write(w, binary.BigEndian, &t.Checksum)
@@ -46,9 +45,8 @@ func (t GTree) Write(w io.Writer) {
 func (t *GTree) Read(r io.Reader) {
 	binary.Read(r, binary.BigEndian, &t.Version)
 	binary.Read(r, binary.BigEndian, &t.FileCount)
-	t.Files = make([]*GFile, t.FileCount)
+	t.Files = make([]GBaseInterface, t.FileCount)
 	for i := uint32(0); i < t.FileCount; i++ {
-		t.Files[i] = &GFile{}
 		t.Files[i].Read(r)
 	}
 	binary.Read(r, binary.BigEndian, &t.Checksum)

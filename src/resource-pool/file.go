@@ -10,21 +10,8 @@ import (
 )
 
 type GFile struct {
-	ctime    uint64 // 提交时间的16进制秒数
-	mtime    uint64
 	FileSize uint32 // 存储文件时文件大小占24位（16MB），但是在内存中时占32位（8G）
-	FileType
-	FileNameLen uint16 // 文件名限长0xffff
-	FileName    string // 变长，为fileNameLen
-	Checksum    [20]byte
-}
-
-func (file GFile) String() string {
-	s, err := json.MarshalIndent(file, "", "  ")
-	if err != nil {
-		log.Fatal(err)
-	}
-	return string(s)
+	*GBase
 }
 
 func (file GFile) MarshalJSON() ([]byte, error) {
