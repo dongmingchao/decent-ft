@@ -36,7 +36,7 @@ func (file GFile) Write(w io.Writer) {
 	binary.Write(w, binary.BigEndian, file.Checksum)
 }
 
-func (file *GFile) Read(r io.Reader) {
+func (file GFile) Read(r io.Reader) {
 	binary.Read(r, binary.BigEndian, &file.FileNameLen)
 	var filename = make([]byte, file.FileNameLen)
 	binary.Read(r, binary.BigEndian, &filename)

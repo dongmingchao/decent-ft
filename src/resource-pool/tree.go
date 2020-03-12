@@ -34,15 +34,15 @@ func (t GTree) String() string {
 }
 
 func (t GTree) Write(w io.Writer) {
-	binary.Write(w, binary.BigEndian, &t.Version)
-	binary.Write(w, binary.BigEndian, &t.FileCount)
+	binary.Write(w, binary.BigEndian, t.Version)
+	binary.Write(w, binary.BigEndian, t.FileCount)
 	for _, each := range t.Files {
 		each.Write(w)
 	}
-	binary.Write(w, binary.BigEndian, &t.Checksum)
+	binary.Write(w, binary.BigEndian, t.Checksum)
 }
 
-func (t *GTree) Read(r io.Reader) {
+func (t GTree) Read(r io.Reader) {
 	binary.Read(r, binary.BigEndian, &t.Version)
 	binary.Read(r, binary.BigEndian, &t.FileCount)
 	t.Files = make([]GBaseInterface, t.FileCount)

@@ -61,7 +61,7 @@ func (watcher *careWatcher) watchHandler(event fsnotify.Event) {
 		if id == length {
 			watcher.stashAppend(event.Name)
 		} else {
-			gfile := GlobalStash.Files[id]
+			gfile := GlobalStash.Files[id].(resourcePool.GFile)
 			oldMarkStr := fmt.Sprintf("%x", gfile.Checksum)
 			readFile(event.Name, func(file *os.File) {
 				obj := stashFile(file)
@@ -94,12 +94,12 @@ func (watcher *careWatcher) stashAppend(filename string) {
 		fName := file.Name()
 		obj := stashFile(file)
 		gfile = resourcePool.GFile{
-			FileName:    fName,
-			FileNameLen: uint16(len(fName)),
-			FileType:    obj.GType,
 			FileSize:    obj.GLen,
-			Checksum:    obj.Mark,
 		}
+		gfile.FileName = fName
+		gfile.FileNameLen = uint16(len(fName))
+		gfile.FileType = obj.GType
+		gfile.Checksum = obj.Mark
 	})
 	GlobalStash.Files = append(GlobalStash.Files, &gfile)
 	watcher.fileNames = append(watcher.fileNames, filename)
@@ -194,7 +194,8 @@ type careWatcher struct {
 func newCareWatcher(stash resourcePool.GTree) *careWatcher {
 	var watcher careWatcher
 	for _, file := range stash.Files {
-		watcher.fileNames = append(watcher.fileNames, file.FileName)
+		f := file.(resourcePool.GFile)
+		watcher.fileNames = append(watcher.fileNames, f.FileName)
 	}
 	return &watcher
 }
