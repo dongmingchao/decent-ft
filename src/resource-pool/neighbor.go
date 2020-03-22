@@ -5,5 +5,3 @@ type GNeighbor struct {
 	*GBase
 }
 
-func main() {
-}
